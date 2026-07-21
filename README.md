@@ -98,7 +98,7 @@ Gerçek `.env` dosyası Git tarafından yok sayılır. Anahtarınızı kaynak ko
 3. Sunucunun `http://127.0.0.1:1234` adresinde çalıştığını doğrulayın.
 4. Ana karşılaştırma için model kimliğinin `google/gemma-4-e4b` olduğundan emin olun.
 
-Local seçim menüsünde embedding modelleri ve Qwen ailesi gösterilmez. Uygun başka LM Studio sohbet modelleri local modda seçilebilir.
+Uygun başka LM Studio sohbet modelleri local modda seçilebilir.
 
 ## Çalıştırma
 
