@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from src.chunker import create_chunks
-from src.cloud_llm_client import extract_response_text
+from src.cloud_llm_client import create_gemini_client, extract_response_text
 from src.document_loader import clean_block_text, load_document
 from src.llm_client import _extract_message_text, _post_chat_request
 
@@ -68,6 +68,32 @@ class ChunkerTests(unittest.TestCase):
 
 
 class ResponseParsingTests(unittest.TestCase):
+    @patch("src.cloud_llm_client.genai.Client")
+    @patch("src.cloud_llm_client.get_configured_api_key")
+    def test_explicit_gemini_key_overrides_configured_key(
+        self,
+        configured_key,
+        client,
+    ):
+        configured_key.return_value = "configured-key"
+
+        create_gemini_client(api_key="user-key")
+
+        client.assert_called_once_with(api_key="user-key")
+
+    @patch("src.cloud_llm_client.genai.Client")
+    @patch("src.cloud_llm_client.get_configured_api_key")
+    def test_gemini_client_uses_configured_key_when_override_is_empty(
+        self,
+        configured_key,
+        client,
+    ):
+        configured_key.return_value = "configured-key"
+
+        create_gemini_client(api_key="")
+
+        client.assert_called_once_with(api_key="configured-key")
+
     def test_extracts_lm_studio_final_message_only(self):
         payload = {
             "output": [

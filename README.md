@@ -70,7 +70,14 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ## Cloud Gemini Ayarı
 
-Örnek ortam dosyasını kopyalayın:
+Uygulamanın web sürümünde Gemini anahtarı için parola alanı bulunur. Yayında
+ortak bir anahtar tanımlıysa alan boş bırakılabilir. Ortak anahtarın kotası
+dolduğunda veya yayında anahtar tanımlı olmadığında kullanıcı kendi Gemini API
+anahtarını girerek devam edebilir. Girilen değer yalnızca açık uygulama
+oturumundaki Gemini isteklerinde kullanılır ve proje dosyalarına yazılmaz.
+
+Projeyi kendi bilgisayarınızda çalıştırırken anahtarı her seferinde girmemek için
+örnek ortam dosyasını kopyalayın:
 
 ```powershell
 Copy-Item .env.example .env
@@ -103,9 +110,13 @@ Uygulama varsayılan olarak [http://localhost:8501](http://localhost:8501) adres
 
 ## Kullanım Modları
 
-- **Cloud - Gemini:** Yalnız Gemini anahtarı gerekir.
-- **Local - LM Studio:** Yalnız çalışan LM Studio sunucusu ve local model gerekir.
+- **Cloud - Gemini:** Tarayıcıdan kullanılabilir; Gemini API anahtarı gerekir.
+- **Local - LM Studio:** Çalışan LM Studio sunucusu ve local model gerekir.
 - **Karşılaştır - Gemini ve Gemma:** Aynı soru, prompt ve kaynak chunk'lar iki modele gönderilir.
+
+Uygulama LM Studio'ya erişemediğinde yalnızca Cloud seçeneğini gösterir. Bu
+nedenle Streamlit Cloud üzerindeki yayın tarayıcıdan Gemini ile çalışır; Local ve
+Karşılaştır seçenekleri LM Studio'nun bulunduğu bilgisayarda otomatik görünür.
 
 ## Chunking ve Retrieval
 
@@ -176,7 +187,6 @@ Her iki model de sayı veya bilgi uydurmak yerine cevabın dokümanda bulunmadı
 ## Raporlar
 
 - [Deneylerde kullanılan Local LLM gözlem raporu](docs/llm_rapor.pdf)
-- [RAG teknik raporu](docs/RAG_Dokuman_Soru_Cevap_Teknik_Rapor.pdf)
 - [Farklı alan testinde kullanılan MGM raporu](docs/test_documents/Haziran_2025_Sicaklik_Yagis_Degerlendirmesi.pdf)
 - [MGM soru, kaynak ve model sonuçlarının ayrıntılı kaydı](docs/MGM_Test_Sonuclari.md)
 
@@ -191,14 +201,7 @@ python -m compileall -q app.py src tests
 python -m unittest discover -s tests -v
 ```
 
-Mevcut test paketi başlık algılama, Türkçe lexical yeniden sıralama, document loader ve model cevap ayrıştırma davranışlarını kapsayan 17 test içerir.
-
-Teknik raporu yeniden üretmek için geliştirme bağımlılıklarını kurup üretim betiğini çalıştırabilirsiniz:
-
-```powershell
-python -m pip install -r requirements-dev.txt
-python scripts/generate_technical_report.py
-```
+Mevcut test paketi başlık algılama, Türkçe lexical yeniden sıralama, document loader, model cevap ayrıştırma ve Gemini anahtar önceliğini kapsayan 19 test içerir.
 
 Cloud bağlantısı isteğe bağlı olarak şu komutla doğrulanabilir; bu komut Gemini kotası kullanır:
 
@@ -219,7 +222,6 @@ document_qa_rag/
 |-- app.py
 |-- README.md
 |-- requirements.txt
-|-- requirements-dev.txt
 |-- .env.example
 |-- .gitignore
 |-- data/
@@ -227,11 +229,8 @@ document_qa_rag/
 |-- docs/
 |   |-- llm_rapor.pdf
 |   |-- MGM_Test_Sonuclari.md
-|   |-- RAG_Dokuman_Soru_Cevap_Teknik_Rapor.pdf
 |   `-- test_documents/
 |       `-- Haziran_2025_Sicaklik_Yagis_Degerlendirmesi.pdf
-|-- scripts/
-|   `-- generate_technical_report.py
 |-- src/
 |   |-- __init__.py
 |   |-- document_loader.py

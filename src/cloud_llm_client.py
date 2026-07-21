@@ -11,21 +11,35 @@ load_dotenv()
 GEMINI_MODEL_NAME = "gemini-3.5-flash"
 
 
-def create_gemini_client() -> genai.Client:
+def get_configured_api_key() -> str | None:
+    """Ortamda tanımlı Gemini anahtarını döndürür."""
+
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    return api_key or None
+
+
+def has_configured_gemini_key() -> bool:
+    """Yerel .env veya ortam değişkeninde anahtar olup olmadığını bildirir."""
+
+    return get_configured_api_key() is not None
+
+
+def create_gemini_client(api_key: str | None = None) -> genai.Client:
     """
     .env dosyasındaki API anahtarıyla
     Gemini istemcisini oluşturur.
     """
 
-    api_key = os.getenv("GEMINI_API_KEY")
+    resolved_api_key = (api_key or "").strip() or get_configured_api_key()
 
-    if not api_key:
+    if not resolved_api_key:
         raise RuntimeError(
-            "GEMINI_API_KEY bulunamadı. "
-            ".env dosyasını kontrol edin."
+            "Gemini API anahtarı bulunamadı. Uygulamadaki anahtar "
+            "alanına kendi anahtarınızı girin veya GEMINI_API_KEY "
+            "ortam değişkenini tanımlayın."
         )
 
-    return genai.Client(api_key=api_key)
+    return genai.Client(api_key=resolved_api_key)
 
 
 def build_cloud_context(
@@ -95,6 +109,7 @@ def get_finish_reasons(response: Any) -> list[str]:
 def generate_cloud_answer(
     question: str,
     relevant_chunks: list[dict[str, Any]],
+    api_key: str | None = None,
 ) -> str:
     """
     Soruyu ve bulunan kaynakları Gemini'ye göndererek
@@ -144,7 +159,7 @@ KULLANICI SORUSU:
 {clean_question}
 """.strip()
 
-    client = create_gemini_client()
+    client = create_gemini_client(api_key=api_key)
 
     try:
         response = client.models.generate_content(
@@ -175,12 +190,12 @@ KULLANICI SORUSU:
     return answer
 
 
-def test_cloud_connection() -> str:
+def test_cloud_connection(api_key: str | None = None) -> str:
     """
     Gemini API anahtarını ve model bağlantısını test eder.
     """
 
-    client = create_gemini_client()
+    client = create_gemini_client(api_key=api_key)
 
     try:
         response = client.models.generate_content(

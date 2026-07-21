@@ -1,11 +1,13 @@
 import time
 
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 
 from src.chunker import create_chunks
 from src.cloud_llm_client import (
     GEMINI_MODEL_NAME,
     generate_cloud_answer,
+    has_configured_gemini_key,
 )
 from src.document_loader import load_document
 from src.llm_client import (
@@ -90,6 +92,27 @@ def get_local_chat_models() -> list[str]:
             for blocked_term in BLOCKED_LOCAL_MODEL_TERMS
         )
     ]
+
+
+@st.cache_data(ttl=5, show_spinner=False)
+def detect_local_chat_models() -> list[str]:
+    """LM Studio erişilebiliyorsa local sohbet modellerini döndürür."""
+
+    try:
+        return get_local_chat_models()
+    except (ConnectionError, RuntimeError):
+        return []
+
+
+def get_streamlit_gemini_key() -> str | None:
+    """Streamlit Cloud secrets içindeki Gemini anahtarını güvenle okur."""
+
+    try:
+        api_key = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
+    except (FileNotFoundError, KeyError, StreamlitSecretNotFoundError):
+        return None
+
+    return api_key or None
 
 
 def show_sources(relevant_chunks: list[dict]) -> None:
@@ -248,36 +271,70 @@ try:
 
     st.subheader("Dokümana soru sor")
 
+    local_chat_models = detect_local_chat_models()
+    provider_options = ["Cloud - Gemini"]
+
+    if local_chat_models:
+        provider_options.append("Local - LM Studio")
+
+    if GEMMA_MODEL_ID in local_chat_models:
+        provider_options.append("Karşılaştır - Gemini ve Gemma")
+
     provider = st.radio(
         "Cevap sağlayıcısı",
-        options=[
-            "Cloud - Gemini",
-            "Local - LM Studio",
-            "Karşılaştır - Gemini ve Gemma",
-        ],
+        options=provider_options,
         horizontal=True,
     )
 
     selected_local_model = None
     provider_ready = True
-    local_chat_models: list[str] = []
+    effective_gemini_key = None
 
+    if provider != "Local - LM Studio":
+        configured_streamlit_key = get_streamlit_gemini_key()
+        configured_key_exists = (
+            configured_streamlit_key is not None
+            or has_configured_gemini_key()
+        )
+
+        user_gemini_key = st.text_input(
+            "Kendi Gemini API anahtarınız",
+            type="password",
+            placeholder=(
+                "İsteğe bağlı" if configured_key_exists
+                else "Cloud cevap için gerekli"
+            ),
+            help=(
+                "Girilen anahtar yalnızca bu oturumdaki Gemini isteklerinde "
+                "kullanılır ve proje dosyalarına kaydedilmez."
+            ),
+        ).strip()
+
+        effective_gemini_key = (
+            user_gemini_key
+            or configured_streamlit_key
+            or None
+        )
+
+        if configured_key_exists:
+            st.caption(
+                "Alanı boş bırakırsanız uygulamada tanımlı Gemini anahtarı "
+                "kullanılır. Kota doluysa kendi anahtarınızla devam edebilirsiniz."
+            )
+        elif not user_gemini_key:
+            st.warning(
+                "Bu yayında ortak Gemini anahtarı tanımlı değil. "
+                "Soru sormak için kendi API anahtarınızı girin."
+            )
+            provider_ready = False
 
     if provider == "Cloud - Gemini":
         st.info(
             f"Cloud model kullanılacak: {GEMINI_MODEL_NAME}"
         )
 
-    else:
-        try:
-            local_chat_models = get_local_chat_models()
-
-        except (ConnectionError, RuntimeError) as error:
-            st.error(str(error))
-            provider_ready = False
-
-
-        if provider_ready and provider == "Local - LM Studio":
+    elif provider == "Local - LM Studio":
+        if provider_ready:
             if not local_chat_models:
                 st.error(
                     "LM Studio'da kullanılabilir bir local sohbet "
@@ -298,24 +355,20 @@ try:
                     index=default_model_index,
                 )
 
+    elif provider_ready:
+        if GEMMA_MODEL_ID not in local_chat_models:
+            st.error(
+                "Karşılaştırma modu için Gemma modeli "
+                "LM Studio'da yüklü ve hazır olmalıdır."
+            )
+            provider_ready = False
 
-        elif (
-            provider_ready
-            and provider == "Karşılaştır - Gemini ve Gemma"
-        ):
-            if GEMMA_MODEL_ID not in local_chat_models:
-                st.error(
-                    "Karşılaştırma modu için Gemma modeli "
-                    "LM Studio'da yüklü ve hazır olmalıdır."
-                )
-                provider_ready = False
-
-            else:
-                st.info(
-                    "Aynı soru ve aynı kaynak chunk'lar "
-                    f"{GEMINI_MODEL_NAME} ile {GEMMA_MODEL_ID} "
-                    "modellerine gönderilecektir."
-                )
+        else:
+            st.info(
+                "Aynı soru ve aynı kaynak chunk'lar "
+                f"{GEMINI_MODEL_NAME} ile {GEMMA_MODEL_ID} "
+                "modellerine gönderilecektir."
+            )
 
 
     # -------------------------------------------------
@@ -369,6 +422,7 @@ try:
                             answer = generate_cloud_answer(
                                 question=question,
                                 relevant_chunks=relevant_chunks,
+                                api_key=effective_gemini_key,
                             )
 
                         answer_duration = (
@@ -452,6 +506,7 @@ try:
                             cloud_answer = generate_cloud_answer(
                                 question=question,
                                 relevant_chunks=relevant_chunks,
+                                api_key=effective_gemini_key,
                             )
 
                         cloud_duration = (
