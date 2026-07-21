@@ -2,8 +2,10 @@ import re
 
 
 HEADING_PATTERN = re.compile(
-    r"^(?:\d+\.\d+|\d+\.)\s+[A-ZÇĞİÖŞÜ]"
+    r"^\d+\.(?:\d+\.?)*\s*[A-ZÇĞİÖŞÜ]"
 )
+
+DOT_LEADER_PATTERN = re.compile(r"\.{4,}\s*\d*\s*$")
 
 
 def is_heading(line: str) -> bool:
@@ -17,12 +19,32 @@ def is_heading(line: str) -> bool:
 
     clean_line = line.strip()
 
-    if len(clean_line) > 140:
+    if not clean_line or len(clean_line) > 140:
         return False
 
-    return bool(
-        HEADING_PATTERN.match(clean_line)
+    # İçindekiler sayfasındaki "1.1 Başlık .... 2" satırlarını
+    # gerçek bölüm başlığı olarak kabul etme.
+    if DOT_LEADER_PATTERN.search(clean_line):
+        return False
+
+    if HEADING_PATTERN.match(clean_line):
+        return True
+
+    # ÖNSÖZ, ÖZET DEĞERLENDİRME ve YAĞIŞ gibi kısa, tamamı
+    # büyük harfli bölüm başlıklarını da algıla.
+    letters = [character for character in clean_line if character.isalpha()]
+    uppercase_word_count = len(clean_line.split())
+    is_short_uppercase_heading = (
+        4 <= len(letters)
+        and uppercase_word_count <= 8
+        and clean_line == clean_line.upper()
+        and (
+            uppercase_word_count >= 2
+            or clean_line in {"ÖNSÖZ", "İÇİNDEKİLER"}
+        )
     )
+
+    return is_short_uppercase_heading
 
 
 def extract_sections(

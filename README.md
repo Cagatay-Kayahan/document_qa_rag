@@ -8,7 +8,8 @@ PDF veya TXT dokümanlarından kaynak göstererek cevap üreten bir RAG uygulama
 - PDF sayfa bilgisini koruyan metin çıkarma
 - Başlık ve paragraf duyarlı chunking
 - Çok dilli E5 embedding modeliyle anlamsal arama
-- ChromaDB üzerinde cosine distance tabanlı retrieval
+- Cosine adayları Türkçe anahtar kelime ve sayılarla yeniden sıralayan hibrit retrieval
+- ChromaDB üzerinde geçici vector store
 - Cloud Gemini ve LM Studio local model desteği
 - Gemini-Gemma karşılaştırma modu
 - Cevabın dayandığı chunk ve sayfaların gösterilmesi
@@ -108,7 +109,9 @@ Uygulama varsayılan olarak [http://localhost:8501](http://localhost:8501) adres
 
 ## Chunking ve Retrieval
 
-İlk kelime tabanlı yaklaşım bölüm ve paragraf sınırlarını karıştırdığı için başlık/paragraf duyarlı chunking uygulanmıştır. Deneylerde kullanılan ayarlar:
+İlk kelime tabanlı yaklaşım bölüm ve paragraf sınırlarını karıştırdığı için başlık/paragraf duyarlı chunking uygulanmıştır. Başlık algılayıcı; numaralı alt başlıkları, kısa büyük harfli başlıkları ve içindekiler sayfasındaki noktalı satırları ayırt eder.
+
+Semantic arama önce geniş bir aday havuzu getirir. Bu adaylar sorudaki ayırt edici Türkçe kelimeler ve sayılar dikkate alınarak yeniden sıralanır. Kullanıcıya yine yalnızca seçtiği `top-k` kadar kaynak gönderilir. Deneylerde kullanılan varsayılan ayarlar:
 
 ```text
 Chunk size: 120 kelime
@@ -124,6 +127,27 @@ Hit@3: 5/5
 ```
 
 Bu oran yalnızca sağlanan deney dokümanı ve test soruları için geçerlidir; tüm dokümanlara genellenmemelidir.
+
+## Farklı Alan Testi
+
+Sistem ayrıca Meteoroloji Genel Müdürlüğünün resmî, 25 sayfalık [Haziran 2025 Sıcaklık ve Yağış Değerlendirmesi](docs/test_documents/Haziran_2025_Sicaklik_Yagis_Degerlendirmesi.pdf) raporuyla sınandı. Bu test, önceki LLM raporundan farklı olarak iklim ve meteoroloji alanındaki sayısal tabloları ve bölgesel karşılaştırmaları içerir. Dokümanın kaynağı [Meteoroloji Genel Müdürlüğü iklim raporları sayfasıdır](https://www.mgm.gov.tr/iklim/iklim-raporlari.aspx).
+
+Bu test sırasında başlık algılama ve retrieval yeniden sıralaması iyileştirildi. Son sürüm raporu 40 chunk'a ayırdı. Cevaplanabilir altı sorunun gerekli kanıtı 6/6 oranında ilk üç kaynakta bulundu.
+
+| Test | Retrieval | Gemini | Gemma |
+|---|---|---:|---:|
+| Türkiye ortalama sıcaklığı | Kanıt ilk 3'te | Doğru, 1.28 sn | Yanlış/çelişkili, 3.22 sn |
+| Türkiye uç sıcaklıkları | Doğru chunk ilk sırada | Doğru, 1.07 sn | Doğru, 2.11 sn |
+| 2024-2025 yağış karşılaştırması | Kanıt ilk 3'te | Doğru, 1.31 sn | Doğru, 4.49 sn |
+| En büyük bölgesel azalma | Tablo ilk 3'te | Doğru, 1.07 sn | Yanlış bölge, 3.25 sn |
+| Karadeniz-Güneydoğu karşılaştırması | Tablo ilk sırada | Doğru, 1.71 sn | Doğru, 8.31 sn |
+| Havza ve yağışlı gün sentezi | İki kanıt ilk 3'te | Doğru, 1.18 sn | Doğru, 2.43 sn |
+
+Cevaplanabilir bu altı soruda Gemini 6/6 doğru ve ortalama 1.27 saniye; Gemma 4/6 doğru ve ortalama 3.97 saniye sonuç verdi. Gemma'nın iki hatasında doğru kanıtlar ilk üçteydi. Bu nedenle iyi retrieval'ın doğru cevap için gerekli olduğu, fakat cevap modelinin kaynakları doğru yorumlamasının da ayrıca önemli olduğu görüldü.
+
+Görsel olarak gömülü ekstrem sıcaklık tablosunun hücreleri PyMuPDF ile metne çıkarılamadı. Her iki model de istasyon isimlerini uydurmadı; bu güvenli davranış olmakla birlikte soru cevaplanamadı. Bu örnek OCR/gelişmiş tablo çıkarımı gereksinimini doğruladı.
+
+Final seride Gemini ücretsiz günlük 20 istek kotasına ulaştı. Uygulama 429 hatasını açık biçimde gösterirken local mod çalışmaya devam etti.
 
 ## Model Karşılaştırması
 
@@ -153,6 +177,8 @@ Her iki model de sayı veya bilgi uydurmak yerine cevabın dokümanda bulunmadı
 
 - [Deneylerde kullanılan Local LLM gözlem raporu](docs/llm_rapor.pdf)
 - [RAG teknik raporu](docs/RAG_Dokuman_Soru_Cevap_Teknik_Rapor.pdf)
+- [Farklı alan testinde kullanılan MGM raporu](docs/test_documents/Haziran_2025_Sicaklik_Yagis_Degerlendirmesi.pdf)
+- [MGM soru, kaynak ve model sonuçlarının ayrıntılı kaydı](docs/MGM_Test_Sonuclari.md)
 
 İlk PDF aynı zamanda uygulamayı hızlıca denemek için örnek giriş dokümanı olarak kullanılabilir.
 
@@ -163,6 +189,15 @@ Syntax ve çekirdek fonksiyon testleri:
 ```powershell
 python -m compileall -q app.py src tests
 python -m unittest discover -s tests -v
+```
+
+Mevcut test paketi başlık algılama, Türkçe lexical yeniden sıralama, document loader ve model cevap ayrıştırma davranışlarını kapsayan 17 test içerir.
+
+Teknik raporu yeniden üretmek için geliştirme bağımlılıklarını kurup üretim betiğini çalıştırabilirsiniz:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python scripts/generate_technical_report.py
 ```
 
 Cloud bağlantısı isteğe bağlı olarak şu komutla doğrulanabilir; bu komut Gemini kotası kullanır:
@@ -184,13 +219,19 @@ document_qa_rag/
 |-- app.py
 |-- README.md
 |-- requirements.txt
+|-- requirements-dev.txt
 |-- .env.example
 |-- .gitignore
 |-- data/
 |   `-- .gitkeep
 |-- docs/
 |   |-- llm_rapor.pdf
-|   `-- RAG_Dokuman_Soru_Cevap_Teknik_Rapor.pdf
+|   |-- MGM_Test_Sonuclari.md
+|   |-- RAG_Dokuman_Soru_Cevap_Teknik_Rapor.pdf
+|   `-- test_documents/
+|       `-- Haziran_2025_Sicaklik_Yagis_Degerlendirmesi.pdf
+|-- scripts/
+|   `-- generate_technical_report.py
 |-- src/
 |   |-- __init__.py
 |   |-- document_loader.py
@@ -199,7 +240,9 @@ document_qa_rag/
 |   |-- llm_client.py
 |   `-- cloud_llm_client.py
 `-- tests/
-    `-- test_core.py
+    |-- test_core.py
+    |-- test_chunker.py
+    `-- test_vector_store.py
 ```
 
 ## Sınırlamalar ve Güvenlik
@@ -214,7 +257,7 @@ document_qa_rag/
 ## Gelecek Geliştirmeler
 
 - OCR ve gelişmiş tablo çıkarımı
-- Reranker ve answerability katmanı
+- Daha güçlü bir cross-encoder reranker ve answerability katmanı
 - Token tabanlı veya semantik chunking
 - Çoklu doküman ve kalıcı vector database desteği
 - Güvenli tool calling ile canlı API/veritabanı bağlantıları
